@@ -1,0 +1,68 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: chronocast
+      POSTGRES_USER: chronocast
+      POSTGRES_PASSWORD: chronocast
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/postgres-init:/docker-entrypoint-initdb.d
+    ports:
+      - "5432:5432"
+
+  mlflow:
+    build:
+      context: .
+      dockerfile: docker/mlflow.Dockerfile
+    environment:
+      MLFLOW_TRACKING_URI: http://0.0.0.0:5000
+    command: >
+      mlflow server
+      --backend-store-uri postgresql://chronocast:chronocast@postgres:5432/mlflow
+      --default-artifact-root /mlflow/artifacts
+      --host 0.0.0.0
+      --port 5000
+    depends_on:
+      - postgres
+    volumes:
+      - mlflow_artifacts:/mlflow/artifacts
+    ports:
+      - "5000:5000"
+
+  django_api:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    environment:
+      DJANGO_DEBUG: "false"
+      DJANGO_ALLOWED_HOSTS: "localhost,127.0.0.1,django_api"
+      CORS_ALLOW_ALL_ORIGINS: "true"
+      POSTGRES_DB: chronocast
+      POSTGRES_USER: chronocast
+      POSTGRES_PASSWORD: chronocast
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      MLFLOW_TRACKING_URI: http://mlflow:5000
+    depends_on:
+      - postgres
+      - mlflow
+    ports:
+      - "8000:8000"
+
+  react_dashboard:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+      args:
+        VITE_API_BASE_URL: http://localhost:8000
+    depends_on:
+      - django_api
+    ports:
+      - "3000:80"
+
+volumes:
+  postgres_data:
+  mlflow_artifacts:

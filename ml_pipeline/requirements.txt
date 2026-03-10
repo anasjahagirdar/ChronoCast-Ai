@@ -1,0 +1,23 @@
+# Data
+yfinance==0.2.36
+pandas==2.2.2
+numpy==1.26.4
+
+# Machine Learning
+scikit-learn==1.4.2
+statsmodels==0.14.2
+
+# Deep Learning
+tensorflow==2.16.1
+
+# MLOps
+mlflow==2.13.0
+
+# Monitoring
+evidently==0.4.22
+
+# Utilities
+python-dotenv==1.0.1
+matplotlib==3.8.4
+plotly==5.22.0
+joblib==1.4.2

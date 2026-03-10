@@ -1,0 +1,26 @@
+# Python
+venv/
+venv310/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.sqlite3
+
+# ML artifacts
+mlruns/
+*.pkl
+*.h5
+*.pt
+*.ckpt
+
+# Node
+node_modules/
+dist/
+
+# Environment
+.env
+
+# OS
+.DS_Store
+Thumbs.db

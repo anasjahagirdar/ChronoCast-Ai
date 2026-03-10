@@ -1,0 +1,94 @@
+@import url("https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+  --bg-top: #07111f;
+  --bg-bottom: #020814;
+  --glass: rgba(8, 15, 29, 0.72);
+  --glass-border: rgba(148, 163, 184, 0.16);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  font-family: "Space Grotesk", "Segoe UI", sans-serif;
+  background:
+    radial-gradient(circle at top left, rgba(34, 211, 238, 0.14), transparent 28%),
+    radial-gradient(circle at top right, rgba(52, 211, 153, 0.12), transparent 24%),
+    linear-gradient(180deg, var(--bg-top), var(--bg-bottom));
+  color: #e2e8f0;
+}
+
+body::before,
+body::after {
+  content: "";
+  position: fixed;
+  inset: auto;
+  pointer-events: none;
+  z-index: -1;
+  border-radius: 999px;
+  filter: blur(80px);
+}
+
+body::before {
+  top: -120px;
+  left: -80px;
+  width: 320px;
+  height: 320px;
+  background: rgba(14, 165, 233, 0.18);
+}
+
+body::after {
+  right: -60px;
+  bottom: -120px;
+  width: 360px;
+  height: 360px;
+  background: rgba(16, 185, 129, 0.14);
+}
+
+#root {
+  min-height: 100vh;
+}
+
+.app-shell {
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+  background-size: 72px 72px;
+}
+
+.glass-card {
+  position: relative;
+  border: 1px solid var(--glass-border);
+  background: linear-gradient(180deg, rgba(12, 18, 34, 0.82), rgba(4, 10, 20, 0.72));
+  box-shadow:
+    0 24px 80px rgba(2, 6, 23, 0.45),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  backdrop-filter: blur(20px);
+  border-radius: 28px;
+  animation: rise-in 0.7s ease both;
+}
+
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
