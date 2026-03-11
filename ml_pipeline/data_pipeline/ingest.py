@@ -1,7 +1,10 @@
+from __future__ import annotations
+
 import os
-import requests
+
 import pandas as pd
-from datetime import datetime
+import requests
+import yfinance as yf
 
 
 # ---------------------------------------------------------
@@ -14,6 +17,7 @@ DATA_DIR = os.path.join(BASE_DIR, "data")
 DATA_FILE = os.path.join(DATA_DIR, "btc_usd_raw.csv")
 
 BINANCE_API = "https://api.binance.com/api/v3/klines"
+YFINANCE_SYMBOL = "BTC-USD"
 
 SYMBOL = "BTCUSDT"
 INTERVAL = "1d"
@@ -34,7 +38,29 @@ def ensure_data_directory():
 # Download BTC Data from Binance
 # ---------------------------------------------------------
 
-def download_btc_data():
+def _normalize_dataset(df):
+
+    if df.empty:
+        raise ValueError("No BTC market data was returned by the upstream provider.")
+
+    expected_columns = ["date", "open", "high", "low", "close", "volume"]
+    frame = df[expected_columns].copy()
+    frame["date"] = pd.to_datetime(frame["date"])
+    frame = frame.astype(
+        {
+            "open": float,
+            "high": float,
+            "low": float,
+            "close": float,
+            "volume": float,
+        }
+    )
+    frame = frame.sort_values("date").dropna().reset_index(drop=True)
+    print(f"Downloaded {len(frame)} rows.")
+    return frame
+
+
+def download_from_binance():
 
     print("Downloading BTC historical data from Binance...")
 
@@ -44,7 +70,7 @@ def download_btc_data():
         "limit": LIMIT
     }
 
-    response = requests.get(BINANCE_API, params=params)
+    response = requests.get(BINANCE_API, params=params, timeout=30)
 
     if response.status_code != 200:
         raise ValueError("Failed to fetch data from Binance API")
@@ -69,20 +95,57 @@ def download_btc_data():
     df = pd.DataFrame(data, columns=columns)
 
     df["date"] = pd.to_datetime(df["open_time"], unit="ms")
+    return _normalize_dataset(df)
 
-    df = df[["date", "open", "high", "low", "close", "volume"]]
 
-    df = df.astype({
-        "open": float,
-        "high": float,
-        "low": float,
-        "close": float,
-        "volume": float
-    })
+def download_from_yfinance():
 
-    print(f"Downloaded {len(df)} rows.")
+    print("Falling back to Yahoo Finance for BTC historical data...")
+    ticker = yf.Ticker(YFINANCE_SYMBOL)
+    history = ticker.history(period="max", interval="1d", auto_adjust=False)
+    if history.empty:
+        raise ValueError("Yahoo Finance returned an empty BTC-USD history.")
 
-    return df
+    history = history.reset_index().rename(
+        columns={
+            "Date": "date",
+            "Open": "open",
+            "High": "high",
+            "Low": "low",
+            "Close": "close",
+            "Volume": "volume",
+        }
+    )
+    return _normalize_dataset(history)
+
+
+def load_cached_dataset():
+
+    if not os.path.exists(DATA_FILE):
+        raise FileNotFoundError("No cached BTC dataset is available.")
+
+    print("Using cached BTC dataset from disk.")
+    return _normalize_dataset(pd.read_csv(DATA_FILE))
+
+
+def download_btc_data():
+
+    providers = [download_from_binance, download_from_yfinance]
+    last_error = None
+
+    for provider in providers:
+        try:
+            return provider()
+        except Exception as exc:
+            last_error = exc
+            print(f"{provider.__name__} failed: {exc}")
+
+    try:
+        return load_cached_dataset()
+    except Exception:
+        pass
+
+    raise RuntimeError("All BTC data sources failed.") from last_error
 
 
 # ---------------------------------------------------------

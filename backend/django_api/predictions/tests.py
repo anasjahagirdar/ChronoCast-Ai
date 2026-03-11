@@ -44,6 +44,15 @@ class ChronoCastApiSmokeTests(SimpleTestCase):
         self.assertEqual(response.json()["status"], "No Drift")
 
     @patch(
+        "monitoring.views.get_drift_summary",
+        return_value={"status": "No Drift", "features": []},
+    )
+    def test_monitoring_root_endpoint(self, _mock_monitoring):
+        response = self.client.get("/api/monitoring/")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["status"], "No Drift")
+
+    @patch(
         "model_registry_api.views.get_models_snapshot",
         return_value={"leaderboard": [], "versions": []},
     )

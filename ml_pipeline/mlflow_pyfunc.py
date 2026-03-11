@@ -41,11 +41,21 @@ class LstmForecastModel(mlflow.pyfunc.PythonModel):
         self.window_size = window_size
         self.model = None
         self.scaler = None
+        self.backend = "keras"
 
     def load_context(self, context):
+        if "model_bundle_path" in context.artifacts:
+            model_bundle = joblib.load(context.artifacts["model_bundle_path"])
+            self.backend = model_bundle["backend"]
+            self.scaler = model_bundle["scaler"]
+            self.window_size = int(model_bundle["window_size"])
+            self.model = model_bundle["model"]
+            return
+
         from tensorflow import keras
 
         scaler_bundle = joblib.load(context.artifacts["scaler_path"])
+        self.backend = "keras"
         self.scaler = scaler_bundle["scaler"]
         self.window_size = int(scaler_bundle["window_size"])
         self.model = keras.models.load_model(context.artifacts["model_path"])
@@ -67,7 +77,16 @@ class LstmForecastModel(mlflow.pyfunc.PythonModel):
                 f"Expected {self.window_size} close values, received {len(series)}."
             )
 
-        scaled = self.scaler.transform(series).reshape(1, self.window_size, 1)
-        prediction_scaled = self.model.predict(scaled, verbose=0).reshape(-1, 1)
+        scaled = self.scaler.transform(series)
+        if self.backend == "keras":
+            prediction_scaled = self.model.predict(
+                scaled.reshape(1, self.window_size, 1),
+                verbose=0,
+            ).reshape(-1, 1)
+        else:
+            prediction_scaled = np.asarray(
+                self.model.predict(scaled.reshape(1, self.window_size)),
+                dtype=float,
+            ).reshape(-1, 1)
         prediction = self.scaler.inverse_transform(prediction_scaled).ravel()
         return prediction

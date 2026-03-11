@@ -1,14 +1,19 @@
 # Python
 venv/
 venv310/
+.venv/
+.python310/
+.tools/
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
 *.sqlite3
+*.log
 
 # ML artifacts
 mlruns/
+.cache/
 *.pkl
 *.h5
 *.pt
@@ -17,6 +22,7 @@ mlruns/
 # Node
 node_modules/
 dist/
+frontend/.npm-cache/
 
 # Environment
 .env
@@ -24,3 +30,12 @@ dist/
 # OS
 .DS_Store
 Thumbs.db
+
+# ChronoCast generated data
+ml_pipeline/data_pipeline/data/*.csv
+
+# Monitoring reports
+ml_pipeline/monitoring/reports/
+
+# MLflow database
+mlflow.db

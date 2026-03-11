@@ -12,6 +12,7 @@ import mlflow.pyfunc
 import numpy as np
 import pandas as pd
 from sklearn.metrics import mean_absolute_error, mean_squared_error
+from sklearn.linear_model import Ridge
 from sklearn.preprocessing import MinMaxScaler
 
 from ml_pipeline.config import (
@@ -27,6 +28,9 @@ from mlops.mlflow.mlflow_config import setup_mlflow
 from mlops.mlflow.model_registry import ModelRegistryManager
 
 
+SUPPORTED_TF_PYTHON_VERSIONS = {(3, 10), (3, 11)}
+
+
 def _run_version_check(command: list[str]) -> bool:
     try:
         result = subprocess.run(
@@ -37,10 +41,28 @@ def _run_version_check(command: list[str]) -> bool:
         )
     except Exception:
         return False
-    return "3.10" in (result.stdout + result.stderr)
+    version_output = result.stdout + result.stderr
+    return any(f"{major}.{minor}" in version_output for major, minor in SUPPORTED_TF_PYTHON_VERSIONS)
 
 
-def resolve_python_3_10() -> list[str] | None:
+def _run_tensorflow_check(command: list[str]) -> bool:
+    try:
+        subprocess.run(
+            command
+            + [
+                "-c",
+                "import tensorflow as tf; print(tf.__version__)",
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except Exception:
+        return False
+    return True
+
+
+def resolve_tensorflow_python() -> list[str] | None:
     env_python = os.getenv("CHRONOCAST_TF_PYTHON")
     candidates = []
     if env_python:
@@ -48,38 +70,32 @@ def resolve_python_3_10() -> list[str] | None:
 
     repo_root = Path(__file__).resolve().parents[2]
     if os.name == "nt":
+        candidates.append([str(repo_root / "venv" / "Scripts" / "python.exe")])
         candidates.append([str(repo_root / "venv310" / "Scripts" / "python.exe")])
+        candidates.append([str(repo_root / "venv311" / "Scripts" / "python.exe")])
+        candidates.append(["py", "-3.11"])
         candidates.append(["py", "-3.10"])
     else:
+        candidates.append([str(repo_root / "venv" / "bin" / "python")])
         candidates.append([str(repo_root / "venv310" / "bin" / "python")])
+        candidates.append([str(repo_root / "venv311" / "bin" / "python")])
+        candidates.append(["python3.11"])
         candidates.append(["python3.10"])
 
     for command in candidates:
-        if _run_version_check(command):
+        if _run_version_check(command) and _run_tensorflow_check(command):
             return command
     return None
 
 
 def ensure_tensorflow_runtime(args: argparse.Namespace):
-    if args.tf310_child or sys.version_info[:2] == (3, 10):
-        return
+    if sys.version_info[:2] in SUPPORTED_TF_PYTHON_VERSIONS:
+        return [sys.executable]
 
-    target_python = resolve_python_3_10()
+    target_python = resolve_tensorflow_python()
     if target_python is None:
-        raise RuntimeError(
-            "TensorFlow training requires Python 3.10. "
-            "Set CHRONOCAST_TF_PYTHON to a Python 3.10 interpreter or create ./venv310."
-        )
-
-    command = target_python + [__file__, "--tf310-child"]
-    if args.epochs is not None:
-        command += ["--epochs", str(args.epochs)]
-    if args.batch_size is not None:
-        command += ["--batch-size", str(args.batch_size)]
-    if args.window_size is not None:
-        command += ["--window-size", str(args.window_size)]
-
-    raise SystemExit(subprocess.call(command))
+        return None
+    return target_python
 
 
 def import_tensorflow_modules():
@@ -96,7 +112,7 @@ def parse_args():
     parser.add_argument("--epochs", type=int, default=20)
     parser.add_argument("--batch-size", type=int, default=32)
     parser.add_argument("--window-size", type=int, default=LSTM_WINDOW_SIZE)
-    parser.add_argument("--tf310-child", action="store_true")
+    parser.add_argument("--tf-child", action="store_true")
     return parser.parse_args()
 
 
@@ -219,14 +235,122 @@ def train_lstm_model(epochs: int = 20, batch_size: int = 32, window_size: int = 
         return {"mae": float(mae), "rmse": float(rmse), "version": version}
 
 
+def train_lstm_fallback_model(window_size: int = LSTM_WINDOW_SIZE):
+    setup_mlflow()
+
+    frame = load_dataset()
+    scaler = MinMaxScaler()
+    scaled_close = scaler.fit_transform(frame[[TARGET_COLUMN]].astype(float))
+    X, y = create_sliding_window_dataset(scaled_close, window_size)
+    X = X.reshape(len(X), window_size)
+
+    split_index = int(len(X) * 0.8)
+    X_train, X_test = X[:split_index], X[split_index:]
+    y_train, y_test = y[:split_index], y[split_index:]
+
+    model = Ridge(alpha=1.0)
+
+    with mlflow.start_run(run_name="LSTM_Model_Fallback"):
+        model.fit(X_train, y_train)
+
+        predictions_scaled = model.predict(X_test).reshape(-1, 1)
+        predictions = scaler.inverse_transform(predictions_scaled).ravel()
+        y_test_actual = scaler.inverse_transform(y_test.reshape(-1, 1)).ravel()
+
+        mae = mean_absolute_error(y_test_actual, predictions)
+        rmse = mean_squared_error(y_test_actual, predictions, squared=False)
+
+        MODELS_DIR.mkdir(parents=True, exist_ok=True)
+        bundle_path = MODELS_DIR / "lstm_fallback_bundle.pkl"
+        joblib.dump(
+            {
+                "backend": "sklearn_window_regressor",
+                "model": model,
+                "scaler": scaler,
+                "window_size": window_size,
+            },
+            bundle_path,
+        )
+
+        mlflow.log_params(
+            {
+                "model_type": "lstm",
+                "runtime_backend": "sklearn_fallback",
+                "window_size": window_size,
+                "train_rows": len(X_train),
+                "test_rows": len(X_test),
+            }
+        )
+        mlflow.log_metrics({"mae": mae, "rmse": rmse})
+        mlflow.pyfunc.log_model(
+            artifact_path=MODEL_ARTIFACT_NAMES["lstm"],
+            python_model=LstmForecastModel(window_size=window_size),
+            artifacts={"model_bundle_path": str(bundle_path)},
+        )
+
+        run_id = mlflow.active_run().info.run_id
+        model_uri = f"runs:/{run_id}/{MODEL_ARTIFACT_NAMES['lstm']}"
+        registry = ModelRegistryManager()
+        version = registry.register_model(
+            model_uri=model_uri,
+            model_name=MODEL_REGISTRY_NAMES["lstm"],
+            tags={
+                "model_type": "lstm",
+                "runtime_backend": "sklearn_fallback",
+            },
+        )
+        registry.promote_to_production(
+            model_name=MODEL_REGISTRY_NAMES["lstm"],
+            version=version,
+        )
+
+        return {
+            "mae": float(mae),
+            "rmse": float(rmse),
+            "version": version,
+            "runtime_backend": "sklearn_fallback",
+        }
+
+
+def build_tensorflow_child_command(target_python: list[str], args: argparse.Namespace) -> list[str]:
+    command = target_python + ["-m", "ml_pipeline.training.train_lstm", "--tf-child"]
+    if args.epochs is not None:
+        command += ["--epochs", str(args.epochs)]
+    if args.batch_size is not None:
+        command += ["--batch-size", str(args.batch_size)]
+    if args.window_size is not None:
+        command += ["--window-size", str(args.window_size)]
+    return command
+
+
 def main():
     args = parse_args()
-    ensure_tensorflow_runtime(args)
-    results = train_lstm_model(
-        epochs=args.epochs,
-        batch_size=args.batch_size,
-        window_size=args.window_size,
-    )
+    if args.tf_child:
+        results = train_lstm_model(
+            epochs=args.epochs,
+            batch_size=args.batch_size,
+            window_size=args.window_size,
+        )
+        print(results)
+        return
+
+    target_python = ensure_tensorflow_runtime(args)
+    if target_python is not None:
+        exit_code = subprocess.call(build_tensorflow_child_command(target_python, args))
+        if exit_code == 0:
+            return
+        print(
+            "TensorFlow LSTM training failed "
+            f"(exit code {exit_code}). Falling back to a sklearn sequence regressor."
+        )
+    else:
+        versions = ", ".join(sorted({f"{major}.{minor}" for major, minor in SUPPORTED_TF_PYTHON_VERSIONS}))
+        print(
+            "No working TensorFlow interpreter was found. "
+            f"Supported Python versions: {versions}. Falling back to a sklearn sequence regressor."
+        )
+
+    results = train_lstm_fallback_model(window_size=args.window_size)
     print(results)
 
 

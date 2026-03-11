@@ -1,9 +1,11 @@
 # Data
 yfinance==0.2.36
-pandas==2.2.2
+pandas==2.2.3
 numpy==1.26.4
+requests==2.32.3
 
 # Machine Learning
+scipy==1.13.1
 scikit-learn==1.4.2
 statsmodels==0.14.2
 
