@@ -213,3 +213,11 @@ Pipeline steps:
 Anas
 
 Machine Learning & Full Stack Development Project
+
+## Dashboard Preview
+
+![Dashboard](docs/Screenshots/Screenshot%202026-03-11%20112547.png)
+
+## MLflow Experiments
+
+![MLflow](docs/Screenshots/Screenshot%202026-03-11%20112614.png)
