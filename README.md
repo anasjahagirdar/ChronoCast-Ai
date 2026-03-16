@@ -24,23 +24,23 @@ Live market intelligence · Model registry governance · Drift surveillance · R
 
 > **BTC Forecasting Dashboard** — Real-time predictions powered by MLflow production registry
 
-![Dashboard Overview](docs/screenshots/Screenshot_2026-03-16_113922.png)
+![Dashboard Overview](docs/Screenshots/01_dashboard_overview.png)
 
 > **Prediction Charts** — BTC close history with forecast trajectory & market regime analysis
 
-![Prediction Charts](docs/screenshots/Screenshot_2026-03-16_113930.png)
+![Prediction Charts](docs/Screenshots/02_prediction_charts.png)
 
 > **Model Performance & Drift Monitoring** — Champion-vs-challenger comparison + feature-level drift surveillance
 
-![Model Performance](docs/screenshots/Screenshot_2026-03-16_113941.png)
+![Model Performance](docs/Screenshots/03_model_performance_drift.png)
 
 > **MLflow Experiments & Model Leaderboard** — Full experiment tracking with ranked model registry
 
-![Experiments Leaderboard](docs/screenshots/Screenshot_2026-03-16_113948.png)
+![Experiments Leaderboard](docs/Screenshots/04_experiments_leaderboard.png)
 
 > **A/B Testing & ROI Simulation** — Offline challenger evaluation + projected strategy PnL vs buy-and-hold
 
-![AB Testing ROI](docs/screenshots/Screenshot_2026-03-16_113956.png)
+![AB Testing ROI](docs/Screenshots/05_abtesting_roi.png)
 
 ---
 
@@ -189,6 +189,7 @@ docker exec -it chronocast-ai_django_api_1 bash -c "cd /app && python run_pipeli
 ```
 
 ### 5. Access the app
+
 | Service | URL |
 |---|---|
 | React Dashboard | http://localhost:3000 |
@@ -220,6 +221,7 @@ Auto-promote best model → Production stage
 ```
 
 **Model Performance (latest run):**
+
 | Model | MAE | RMSE | Stage |
 |---|---|---|---|
 | Linear Regression | **407.36** | 629.74 | ✅ Production |
@@ -232,7 +234,7 @@ Auto-promote best model → Production stage
 
 Every push to `main` automatically deploys to the Azure VM via GitHub Actions:
 
-```yaml
+```
 Push to main
     ↓
 GitHub Actions (ubuntu-latest)
@@ -303,10 +305,6 @@ Full Stack Developer & Generative AI Engineer
 [![LinkedIn](https://img.shields.io/badge/LinkedIn-Connect-0A66C2?style=for-the-badge&logo=linkedin)](https://linkedin.com/in/anasjahagirdar)
 
 ---
-
-## 📄 License
-
-This project is open source and available under the [MIT License](LICENSE).
 
 ---
 
