@@ -39,3 +39,6 @@ ml_pipeline/monitoring/reports/
 
 # MLflow database
 mlflow.db
+
+# PM2 logs
+frontend/logs/*.log

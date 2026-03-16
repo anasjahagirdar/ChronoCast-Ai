@@ -7,7 +7,15 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "start": "vite preview --host",
+    "start:prod": "pm2 start ecosystem.config.js --env production",
+    "stop": "pm2 stop chronocast-frontend",
+    "restart": "pm2 restart chronocast-frontend",
+    "logs": "pm2 logs chronocast-frontend",
+    "status": "pm2 status",
+    "monit": "pm2 monit",
+    "build:start": "npm run build && pm2 start ecosystem.config.js --env production"
   },
   "dependencies": {
     "axios": "^1.13.6",

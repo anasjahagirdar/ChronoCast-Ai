@@ -221,3 +221,67 @@ Machine Learning & Full Stack Development Project
 ## MLflow Experiments
 
 ![MLflow](docs/Screenshots/Screenshot%202026-03-11%20112614.png)
+
+---
+
+## PM2 Deployment
+
+> These instructions apply when running the **React frontend** on a bare-metal server without Docker.
+> The frontend is built by Vite and served via `vite preview` managed by PM2.
+
+### Prerequisites
+
+```bash
+# Install PM2 globally
+npm install -g pm2
+```
+
+### Start in production (build + launch)
+
+```bash
+cd frontend
+npm run build:start
+```
+
+Or if the app is already built:
+
+```bash
+cd frontend
+npm run start:prod
+```
+
+### Common commands
+
+```bash
+pm2 status                        # view running processes
+pm2 logs chronocast-frontend      # stream logs
+pm2 restart chronocast-frontend   # restart app
+pm2 stop chronocast-frontend      # stop app
+pm2 delete chronocast-frontend    # remove from PM2
+pm2 monit                         # live monitoring dashboard
+```
+
+Or use the npm shortcuts from `frontend/`:
+
+```bash
+npm run status
+npm run logs
+npm run restart
+npm run stop
+npm run monit
+```
+
+### Auto-start on server reboot
+
+```bash
+pm2 startup          # generates a startup command — run the output as sudo
+pm2 save             # saves the current process list
+```
+
+### Services at runtime
+
+| Service | URL |
+|---|---|
+| Frontend (PM2 / vite preview) | http://localhost:3000 |
+| Django API | http://127.0.0.1:8000 |
+| MLflow UI | http://localhost:5000 |

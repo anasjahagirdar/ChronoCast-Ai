@@ -1,0 +1,150 @@
+# ChronoCast AI — Complete System Analysis Report
+
+## 1. Project Overview
+ChronoCast AI is a full-stack, production-grade machine learning platform designed to forecast Bitcoin (BTC) prices using historical market data. It demonstrates an end-to-end ML engineering workflow that encompasses data ingestion, preprocessing, robust feature engineering, model training and registry (via MLflow), drift monitoring (via Evidently AI), and an interactive React-based fintech dashboard for real-time inference serving.
+
+## 2. Technology Stack
+The technology stack reflects modern ML-ops best practices with a clear separation of concerns between data science capabilities and standard web application infrastructure.
+
+- **Backend / API Wrapper**: Python 3.10+, Django, Django REST Framework (DRF). *Chosen for strong community support, ORM, and seamless integration with Python-based ML libraries.*
+- **Machine Learning Core**: Scikit-learn, Statsmodels, TensorFlow/PyTorch. *Chosen to support branching model types (Linear Regression, ARIMA, LSTM).*
+- **Experiment Tracking / Model Registry**: MLflow. *Industry standard for tracking hyperparameters, artifacts, and promoting models across stages (Staging, Production).*
+- **Data Monitoring**: Evidently AI. *Chosen for out-of-the-box data drift and target drift reporting.*
+- **Frontend**: React 19, Vite, TailwindCSS 3, Chart.js / `react-chartjs-2`. *Chosen for rapid UI development, robust data visualization, and fast build times.*
+- **Database**: PostgreSQL (Dockerized) for both Django application data and MLflow backend store. *Chosen for robust ACID compliance and relational structuring.*
+- **Deployment / Ops**: Docker & Docker Compose, PM2 (bare-metal fallback), Nginx.
+
+## 3. Architecture Analysis
+The software follows an **Event-Driven Component-based Microservices architecture**, loosely coupled via HTTP REST APIs. 
+
+**Backend Architecture:**
+- **Data/ML Pipeline Layer**: Operates as offline batch scripts ([run_pipeline.py](file:///d:/Bizmetric/F.S.D/ChronoCast%20AI/run_pipeline.py)) that ingest data from Binance, process it, extract features, construct and train models, evaluate drift, and push artifacts to MLflow.
+- **API Serving Layer**: Django REST Framework acts as the intermediary. It retrieves production models from MLflow and exposes endpoints for inference, A/B testing, and ROI scenarios without running heavy training loops itself.
+
+**Frontend Architecture:**
+- A client-side Single Page Application (SPA). Uses React Hooks (`useDashboardData`) to concurrently fetch telemetry across various domains (Predictions, Experiments, Drift, Models, ROI) and renders them via ChartJS components over a glassmorphism (Tailwind) UI.
+
+**Separation of Concerns:**
+- Training logic and execution are decoupled from API serving. The ML pipeline handles heavy compute offline; Django handles fast REST IO online.
+- State is pushed to Postgres; metrics are pushed to MLflow.
+
+## 4. Directory Structure Explanation
+```text
+/
+├── backend/            # Django application handling API requests.
+│   └── django_api/
+│       ├── core/       # Project settings & root URL configurations.
+│       ├── predictions/ # App: Handles real-time BTC inference endpoints.
+│       ├── experiments/ # App: Fetches MLflow runs and experiment metrics.
+│       ├── monitoring/  # App: Exposes data drift telemetry from Evidently AI.
+│       ├── ab_testing/  # App: Manages champion-challenger evaluations.
+│       ├── roi/         # App: Simulates PnL and trade strategy outcomes.
+│       └── model_registry_api/ # App: Interacts with MLflow Model Registry.
+├── frontend/           # Vite + React SPA.
+│   ├── src/
+│   │   ├── api.js      # Axios networking configuration and API aggregator.
+│   │   ├── App.jsx     # Main Dashboard visualization view (ChartJS integration).
+│   │   ├── hooks/      # React hooks managing data-fetching state (e.g. useDashboardData).
+│   │   └── index.css   # Tailwind directives and custom CSS.
+│   ├── ecosystem.config.js # PM2 config for bare-metal preview serving.
+│   └── package.json    # React dependencies and PM2 scripts.
+├── ml_pipeline/        # The offline Machine Learning workload.
+│   ├── data_pipeline/  # Scripts for API ingestion, cleaning, and target shifting.
+│   ├── training/       # Module scripts to train Linear, ARIMA, and LSTM models.
+│   ├── inference/      # Offline prediction wrappers.
+│   ├── monitoring/     # Drift detection execution logic (generates reports).
+│   ├── models/         # Base configurations and abstract wrappers.
+│   └── config.py       # Global pipeline variables (paths, targets, columns).
+├── mlops/              # MLflow execution context (if running standalone).
+├── docker/             # Custom Dockerfiles and initialization scripts (e.g., Postgres Init).
+├── docker-compose.yml  # Multi-container orchestration (Postgres, MLflow, Django, React).
+└── run_pipeline.py     # Master execution orchestrator for training the models.
+```
+
+## 5. Codebase Analysis
+- **[run_pipeline.py](file:///d:/Bizmetric/F.S.D/ChronoCast%20AI/run_pipeline.py) (Orchestrator)**: Uses `subprocess` to trigger a sequential DAG-like execution flow: Data Ingestion -> Preprocessing -> Feature Engineering -> Training (Linear -> ARIMA -> LSTM) -> Drift Detection.
+- **[frontend/src/App.jsx](file:///d:/Bizmetric/F.S.D/ChronoCast%20AI/frontend/src/App.jsx) (UI Core)**: Utilizes a functional component architecture with heavy styling logic. It aggregates various contexts (Price Charts, Model Leaderboards, A/B Splits, ROI graphs) into a cohesive dashboard.
+- **[ml_pipeline/config.py](file:///d:/Bizmetric/F.S.D/ChronoCast%20AI/ml_pipeline/config.py)**: Highly central to truth. Defines variables like `FEATURE_COLUMNS` (`ma_7`, `ma_30`, `volatility`, `lag_1`, `lag_7`, `return`), `TARGET_COLUMN` (`close`), and `LSTM_WINDOW_SIZE` (`30`).
+
+**Code Patterns Used:**
+- **Facade Pattern**: The Django API acts as a facade over MLflow’s native client, converting MLflow SDK calls into clean JSON for the frontend.
+- **Aggregator Pattern**: [frontend/src/api.js](file:///d:/Bizmetric/F.S.D/ChronoCast%20AI/frontend/src/api.js) fires a `Promise.all` across 6 distinct API endpoints, transforming relational data into a unified Context payload for React.
+
+## 6. Data Flow
+**Offline Training Lifecycle:**
+1. **Ingest**: `ml_pipeline/data_pipeline` pulls historic BTC closes from the Binance API.
+2. **Transform**: Missing values are imputed; rolling windows (MA7, MA30, volatility) are calculated. Data splits into train/test.
+3. **Train & Register**: Models (Linear, ARIMA, LSTM) fit the data. The models, associated parameters, and RMSE/MAE metrics are logged to the MLflow instance running via Docker (tracked in SQLite/Postgres DB).
+4. **Tagging**: The best performing model in MLflow automatically transitions to "Production" status.
+
+**Online Inference Request Lifecycle:**
+1. **User/Frontend**: Navigates to the React Dashboard.
+2. **API Call**: `Promise.all` triggers a `GET /api/predictions/`.
+3. **Backend Service Layer**: Django queries MLflow's registry for the model tagged "Production".
+4. **Execution**: The model artifact is downloaded into memory. Django pulls the latest realtime feature snapshot.
+5. **Response**: Django computes the inference (the `predicted_close`), returning the JSON payload back to the Vite frontend for ChartJS rendering.
+
+## 7. Database Analysis
+The system leverages **PostgreSQL 16**.
+- **Application DB (`chronocast`)**: Handles Django's internal state (User Sessions, Admin routing).
+- **MLflow Tracking Backend (`mlflow`)**: Connected via `postgresql://chronocast:chronocast@postgres:5432/mlflow`. Stores:
+  - `experiments`: Meta-data about the forecasting problem.
+  - `runs`: Individual training execution records.
+  - `metrics`: MAE, RMSE values over time.
+  - `params`: Hyperparameters for models (e.g., ARIMA `p, d, q` values).
+  - `model_versions`: Registry tracking for champion-challenger governance.
+
+## 8. API Documentation
+The overarching Django REST API base endpoints:
+- `GET /api/predictions/`: Loads the production model artifact, parses current BTC data, calculates 7-day trailing metrics, and returns the next candle forecast wrapper.
+- `GET /api/experiments/`: Queries the backend MLflow tracking server for the latest 5 training runs, displaying MAE/RMSE comparisons.
+- `GET /api/monitoring/drift/`: Consumes the JSON reports emitted by Evidently AI, returning a breakdown of `p-values` and drift categorization per feature.
+- `GET /api/models/`: Fetches the active Leaderboard mapping model types against their active registry Stage (Production vs Staging).
+- `GET /api/ab-testing/`: Supplies simulated traffic share splits and confidence intervals comparing the Production model to Staging models.
+- `GET /api/roi/`: Returns a simulated equity curve analyzing profitability assuming a strategy that trades the forecast vs a buy-and-hold baseline.
+
+## 9. Frontend Architecture
+- **Framework & Routing**: React 19 acts as the view layer. Because the application is a deeply integrated single-view dashboard, heavy client-side routing is non-existent—relying on a monolithic `App` container component.
+- **State Management**: Wrapped inside custom hook abstractions (e.g., `useDashboardData()`), which handles network errors, loading shells, and parses API aggregates securely. 
+- **Components Component Tree**:
+  - `MetricCard` & `CompactStat`: Reusable UI tokens presenting key figures.
+  - `OverviewRow`: Glassmorphism table-less rows.
+  - `Chart.js Wrapper components`: `<Line/>`, `<Bar/>`, `<Doughnut/>`.
+- **API Integration**: Handled by Axios in `src/api.js`, leveraging a statically injected `VITE_API_BASE_URL` mapping backend REST targets.
+
+## 10. Configuration & Environment
+- **`.env.example`**: Defines database URIs (`POSTGRES_DB`), CORS domains (`CORS_ALLOWED_ORIGINS`), and the MLflow Tracking interface (`MLFLOW_TRACKING_URI=http://localhost:5000`). It also controls PM2 via `PORT=3000`.
+- **`docker-compose.yml`**: Defines the orchestration topology. Maps volumes for Postgres DB persistence (`postgres_data`) and MLflow artifact binary blobs (`mlflow_artifacts`). 
+- **`frontend/vite.config.js`**: Replaces the standard Webpack setup. Handles local dev proxying (proxying `/api` -> `localhost:8000`) bypassing CORS errors during development.
+- **`ecosystem.config.js`**: Enables PM2 to launch `vite preview --host` safely using cluster mode memory constraints when avoiding Docker topologies.
+
+## 11. Deployment System
+The primary deployment vehicle is **Docker via Docker-Compose**.
+- **Database**: Standard Postgres 16 Alpine container, seeded by `./docker/postgres-init`. 
+- **MLflow**: Custom build (`docker/mlflow.Dockerfile`), binding to port 5000 and the Postgres DB, maintaining binary artifacts in a Docker volume. 
+- **Backend**: Django builds (`backend/Dockerfile`), pulling environment overrides to connect to Postgres and MLflow concurrently over port 8000. 
+- **Frontend**: (`frontend/Dockerfile`) A multi-stage build. `node:20` compiles the Vite bundle, then maps `/app/dist` to an `nginx:1.27-alpine` webroot—serving statics over port 80 (mapped to 3000 on the host). 
+
+*(Fallback Production System: Node/PM2 executes the Vite preview directly over the FS out of the React `dist/` block)*
+
+## 12. Runtime Workflow
+**Start up Process (Docker):**
+- Composition spins up. DB starts first. MLflow bounds itself to DB. Django applies DB migrations on launch, waits for MLflow UI to accept API requests, and starts the WSGI/ASGI web process. Nginx spins up the compiled front-end.
+- Separately, a developer schedules a cron-job to run `python run_pipeline.py`.
+- The ML pipeline trains the three standard algorithmic models, publishing their performance to the database via MLflow. The best model promotes to Production automatically.
+- Front-end fetches Dashboard payload. Django API intercepts, hits MLflow, runs live inference against Binance, parses to JSON, and the React UI updates. 
+
+## 13. Security Review
+- **Authentication**: N/A for public API routes. Django Admin remains protected under default Django auth.
+- **CORS Configuration**: Specifically tailored `CORS_ALLOWED_ORIGINS` to permit the Vite React port (`5173` or `3000`), rejecting hostile domains.
+- **Secrets Management**: Sensitive data stripped out via `.gitignore` tracking constraints preventing `.env` commits. 
+- **Data Validation**: Strict decoupling prevents SQL injection from client-facing dashboards (frontend only ingests pre-formatted REST data and ML model artifacts remain firewalled in MLflow containers).
+- **Vulnerabilities**: If exposed to wild subnets, `MLflow server` binds natively without IAM authentication natively enabled—it should remain deeply constrained inside the Docker network.
+
+## 14. Performance Analysis
+- **Execution Efficiency**: The pipeline splits training jobs across distinct isolated scripts. Deep Learning models utilizing TensorFlow can leverage the `CHRONOCAST_TF_PYTHON` flag pointing execution toward CUDA/GPU optimized environments without interrupting the standard Linear/ARIMA workflows.
+- **Caching Mechanisms**: By serving the React application natively via **Nginx** inside Docker or via **Vite Preview in PM2 Cluster Mode**, response times for frontend payloads achieve high levels of static delivery concurrency.
+- **Scalability Limitations**: The Django endpoints presently trigger inference dynamically holding the API thread hostage until prediction occurs. As query volume shifts significantly, transitioning inference processing to a background message queue (like Celery) running asynchronous models would be paramount.
+
+## 15. Complete System Summary
+ChronoCast AI operates as a deeply structured predictive analytics pipeline targeted at Bitcoin index valuation. Under the hood, it seamlessly separates offline computational tasks (data processing, feature engineering, statistical training loops) utilizing Python from its highly concurrent web-service layer built on Django and React. Using standard data-science governance (MLflow + Evidently AI), it abstracts the raw statistics into comprehensible endpoints that the Vite-engineered React UI visualizes—converting intricate financial telemetry like Data Drift, A/B Strategy Performance, and ROI simulations, into user-friendly fintech visualizations. The architecture guarantees zero tight coupling, permitting robust containerized cloud execution (Docker) or bare-metal delivery (PM2).
