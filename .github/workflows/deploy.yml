@@ -1,0 +1,25 @@
+name: Deploy ChronoCast AI to Azure VM
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Deploy to VM
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.VM_HOST }}
+          username: ${{ secrets.VM_USER }}
+          key: ${{ secrets.VM_KEY }}
+          script: |
+            cd ~/ChronoCast-Ai
+            git pull origin main
+            docker-compose down
+            docker-compose up -d --build
+            docker-compose ps
